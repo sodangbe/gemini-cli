@@ -30,6 +30,7 @@ import { WebFetchTool } from '../tools/web-fetch.js';
 import { ReadManyFilesTool } from '../tools/read-many-files.js';
 import { MemoryTool, setGeminiMdFilename } from '../tools/memoryTool.js';
 import { WebSearchTool } from '../tools/web-search.js';
+import { SharePointGraphTool } from '../tools/sharepoint-graph.js';
 import { GeminiClient } from '../core/client.js';
 import { BaseLlmClient } from '../core/baseLlmClient.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
@@ -119,6 +120,14 @@ export interface OutputSettings {
 }
 
 export interface CodebaseInvestigatorSettings {
+  enabled?: boolean;
+  maxNumTurns?: number;
+  maxTimeMinutes?: number;
+  thinkingBudget?: number;
+  model?: string;
+}
+
+export interface SharePointFolderProcessorSettings {
   enabled?: boolean;
   maxNumTurns?: number;
   maxTimeMinutes?: number;
@@ -280,6 +289,7 @@ export interface ConfigParameters {
   useModelRouter?: boolean;
   enableMessageBusIntegration?: boolean;
   codebaseInvestigatorSettings?: CodebaseInvestigatorSettings;
+  sharepointFolderProcessorSettings?: SharePointFolderProcessorSettings;
   continueOnFailedApiCall?: boolean;
   retryFetchErrors?: boolean;
   enableShellOutputEfficiency?: boolean;
@@ -377,6 +387,7 @@ export class Config {
   private readonly useModelRouter: boolean;
   private readonly enableMessageBusIntegration: boolean;
   private readonly codebaseInvestigatorSettings: CodebaseInvestigatorSettings;
+  private readonly sharepointFolderProcessorSettings: SharePointFolderProcessorSettings;
   private readonly continueOnFailedApiCall: boolean;
   private readonly retryFetchErrors: boolean;
   private readonly enableShellOutputEfficiency: boolean;
@@ -481,6 +492,17 @@ export class Config {
         params.codebaseInvestigatorSettings?.thinkingBudget ??
         DEFAULT_THINKING_MODE,
       model: params.codebaseInvestigatorSettings?.model ?? DEFAULT_GEMINI_MODEL,
+    };
+    this.sharepointFolderProcessorSettings = {
+      enabled: params.sharepointFolderProcessorSettings?.enabled ?? false,
+      maxNumTurns: params.sharepointFolderProcessorSettings?.maxNumTurns ?? 50,
+      maxTimeMinutes:
+        params.sharepointFolderProcessorSettings?.maxTimeMinutes ?? 10,
+      thinkingBudget:
+        params.sharepointFolderProcessorSettings?.thinkingBudget ??
+        DEFAULT_THINKING_MODE,
+      model:
+        params.sharepointFolderProcessorSettings?.model ?? DEFAULT_GEMINI_MODEL,
     };
     this.continueOnFailedApiCall = params.continueOnFailedApiCall ?? true;
     this.enableShellOutputEfficiency =
@@ -1084,6 +1106,10 @@ export class Config {
     return this.codebaseInvestigatorSettings;
   }
 
+  getSharePointFolderProcessorSettings(): SharePointFolderProcessorSettings {
+    return this.sharepointFolderProcessorSettings;
+  }
+
   async createToolRegistry(): Promise<ToolRegistry> {
     const registry = new ToolRegistry(this, this.eventEmitter);
 
@@ -1171,6 +1197,7 @@ export class Config {
     registerCoreTool(ShellTool, this);
     registerCoreTool(MemoryTool);
     registerCoreTool(WebSearchTool, this);
+    registerCoreTool(SharePointGraphTool, this);
     if (this.getUseWriteTodos()) {
       registerCoreTool(WriteTodosTool, this);
     }
@@ -1179,6 +1206,43 @@ export class Config {
     if (this.getCodebaseInvestigatorSettings().enabled) {
       const definition = this.agentRegistry.getDefinition(
         'codebase_investigator',
+      );
+      if (definition) {
+        // We must respect the main allowed/exclude lists for agents too.
+        const excludeTools = this.getExcludeTools() || [];
+        const allowedTools = this.getAllowedTools();
+
+        const isExcluded = excludeTools.includes(definition.name);
+        const isAllowed =
+          !allowedTools || allowedTools.includes(definition.name);
+
+        if (isAllowed && !isExcluded) {
+          try {
+            const messageBusEnabled = this.getEnableMessageBusIntegration();
+            const wrapper = new SubagentToolWrapper(
+              definition,
+              this,
+              messageBusEnabled ? this.getMessageBus() : undefined,
+            );
+            registry.registerTool(wrapper);
+          } catch (error) {
+            console.error(
+              `Failed to wrap agent '${definition.name}' as a tool:`,
+              error,
+            );
+          }
+        } else if (this.getDebugMode()) {
+          console.log(
+            `[Config] Skipping registration of agent '${definition.name}' due to allow/exclude configuration.`,
+          );
+        }
+      }
+    }
+
+    // Register SharePoint Folder Processor agent as a tool
+    if (this.getSharePointFolderProcessorSettings().enabled) {
+      const definition = this.agentRegistry.getDefinition(
+        'sharepoint_folder_processor',
       );
       if (definition) {
         // We must respect the main allowed/exclude lists for agents too.

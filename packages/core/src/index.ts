@@ -102,6 +102,13 @@ export * from './tools/read-many-files.js';
 export * from './tools/mcp-client.js';
 export * from './tools/mcp-tool.js';
 export * from './tools/write-todos.js';
+export * from './tools/sharepoint-graph.js';
+
+// Export agents
+export * from './agents/types.js';
+export * from './agents/registry.js';
+export * from './agents/codebase-investigator.js';
+export * from './agents/sharepoint-folder-processor.js';
 
 // MCP OAuth
 export { MCPOAuthProvider } from './mcp/oauth-provider.js';
