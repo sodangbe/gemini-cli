@@ -7,6 +7,7 @@
 import type { Config } from '../config/config.js';
 import type { AgentDefinition } from './types.js';
 import { CodebaseInvestigatorAgent } from './codebase-investigator.js';
+import { SharePointFolderProcessorAgent } from './sharepoint-folder-processor.js';
 import { type z } from 'zod';
 
 /**
@@ -56,6 +57,35 @@ export class AgentRegistry {
           max_turns:
             investigatorSettings.maxNumTurns ??
             CodebaseInvestigatorAgent.runConfig.max_turns,
+        },
+      };
+      this.registerAgent(agentDef);
+    }
+
+    const sharepointSettings =
+      this.config.getSharePointFolderProcessorSettings();
+
+    // Only register the agent if it's enabled in the settings.
+    if (sharepointSettings?.enabled) {
+      const agentDef = {
+        ...SharePointFolderProcessorAgent,
+        modelConfig: {
+          ...SharePointFolderProcessorAgent.modelConfig,
+          model:
+            sharepointSettings.model ??
+            SharePointFolderProcessorAgent.modelConfig.model,
+          thinkingBudget:
+            sharepointSettings.thinkingBudget ??
+            SharePointFolderProcessorAgent.modelConfig.thinkingBudget,
+        },
+        runConfig: {
+          ...SharePointFolderProcessorAgent.runConfig,
+          max_time_minutes:
+            sharepointSettings.maxTimeMinutes ??
+            SharePointFolderProcessorAgent.runConfig.max_time_minutes,
+          max_turns:
+            sharepointSettings.maxNumTurns ??
+            SharePointFolderProcessorAgent.runConfig.max_turns,
         },
       };
       this.registerAgent(agentDef);
